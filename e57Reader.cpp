@@ -324,7 +324,7 @@ int E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
   if (vectorReader.isOpen())
   {
     int np = 0;
-    while (np = vectorReader.read() != 0)
+    while ((np = vectorReader.read()) != 0)
     {
       x.resize(np);
       y.resize(np);
@@ -344,10 +344,13 @@ int E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
         {
           rIntensity[i] = 0.5;
         }
-        /*if (mHasColor)
-        { rgbColor[i] = mr[i] + (mg[i] << 8) + (mb[i] << 16); }*/
+        if (mHasColor)
+        {
+          rgbColor[i] = mr[i] + (mg[i] << 8) + (mb[i] << 16);
+        }
       }
     }
+    vectorReader.close();
   }
   return total;
 }

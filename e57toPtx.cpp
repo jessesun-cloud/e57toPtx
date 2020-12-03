@@ -66,6 +66,7 @@ int ProcessConvert()
   }
 
   E57Reader reader;
+  __int64 total = 0;
   if (reader.Open(input.c_str()))
     while (reader.MoveNextScan())
     {
@@ -82,11 +83,13 @@ int ProcessConvert()
       vector<float>x, y, z, intensity;
       vector<int> color;
       int np;
-      if (np = reader.ReadPoints(x, y, z, intensity, color) != 0)
+      if ((np = reader.ReadPoints(x, y, z, intensity, color)) != 0)
       {
         ptxwriter.WritePoints(x, y, z, intensity, color);
       }
+      total += np;
     }
+  printf("convert %lld points\r\n", total);
   return 0;
 }
 
