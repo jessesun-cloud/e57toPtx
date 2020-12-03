@@ -1,11 +1,14 @@
 #pragma once
 #include <vector>
 #include <string>
-#include <stdio.h>
+#include <functional>
 
 using namespace std;
 
-typedef bool CB(int*) ;
+typedef std::function<bool(vector<float>& x, vector<float>& y,
+                           vector<float>& z,
+                           vector<float>& rIntensity,
+                           vector<int>& rgbColor)> CB;
 class E57Reader
 {
 public:
@@ -17,12 +20,14 @@ public:
   std::string GetScanName();
   bool GetHeader(double scannerPos[12], double ucs[16]);
   bool MoveNextScan();
-  int ReadPoints(vector<float>& x, vector<float>& y, vector<float>& z,
-                 vector<float>& rIntensity, vector<int>& rgbColor);
-  bool TravelPoints(CB fun);
+  size_t ReadPoints(vector<float>& x, vector<float>& y,
+                    vector<float>& z,
+                    vector<float>& rIntensity,
+                    vector<int>& rgbColor,
+                    CB pFun);
   int GetNumScan();
   void Reset();
-  __int64 GetPointCount();
+  size_t GetPointCount();
 private:
   struct Impl;
   Impl* mpImpl;

@@ -10,14 +10,12 @@
 #include <windows.h>
 #endif
 #include <E57Simple.h>
-
-#include <map>
-#include <float.h>
 #include <Eigen/Dense>
 #include <strstream>
 
 namespace fs = std::experimental::filesystem;
 using namespace e57;
+using namespace Eigen;
 
 struct E57Reader::Impl
 {
@@ -28,17 +26,16 @@ struct E57Reader::Impl
   int mNumScan;
   int mCurrentScan;
   bool mbColumnIndex;
-  vector<double> mX;
-  vector<double> mY;
-  vector<double> mZ;
-  vector<double> mIntensity;
-  vector<uint8_t> mr, mg, mb;
+  vector<double>  mPosition;
+  vector<float> mIntensity;
   vector<int >rowIndex, columnIndex;
-  vector<int> mState;
-  std::string mScanName;
-  int mFormat = -1;
+  vector<uint8_t> mState;
+  std::string mScanmColorsName;
+  vector<int> mColors;
   bool mHasIntensity;
   bool mHasColor;
+  bool mHasState;
+  e57::Data3D mMetaData;
 
   Impl(E57Reader* pReader)
   {
@@ -47,17 +44,7 @@ struct E57Reader::Impl
     mPointCount = 0;
     mSubsample = 1;
   }
-  bool Open(const char* pFile)
-  {
-    mFilename = pFile;
-    fs::path fn(pFile);
-    if (fs::exists(pFile) == false)
-    { return false; }
-    mpReader = std::shared_ptr<e57::Reader>(
-                 new e57::Reader(e57::ustring(pFile)));
-    Init();
-    return true;
-  }
+  bool Open(const char* pFile);
   void Init();
   bool MoveNextScan();
   bool GetSize(int& columns, int& rows);
@@ -65,10 +52,12 @@ struct E57Reader::Impl
   std::string GetScanName();
   bool GetHeader(double scannerPos[12],  double ucs[16]);
 
-  int ReadPoints(vector<float>& x, vector<float>& y, vector<float>& z,
-                 vector<float>& rIntensity, vector<int>& rgbColor);
-  CompressedVectorReader InitReader(int chunk);
+  size_t ReadPoints(vector<float>& x, vector<float>& y,
+                    vector<float>& z, vector<float>& rIntensity,
+                    vector<int>& rgbColor, CB pFun);
+  void InitDataBuffer(int chunk, vector<SourceDestBuffer>& sdb);
   void Reset();
+  void AnalysisFormat();
 };
 
 bool E57Reader::Open(const char* pFilename)
@@ -76,6 +65,19 @@ bool E57Reader::Open(const char* pFilename)
   return mpImpl->Open(pFilename);
 }
 
+bool E57Reader::Impl:: Open(const char* pFile)
+{
+  mFilename = pFile;
+  fs::path fn(pFile);
+  if (fs::exists(pFile) == false)
+  {
+    return false;
+  }
+  mpReader = std::shared_ptr<e57::Reader>(
+               new e57::Reader(e57::ustring(pFile)));
+  Init();
+  return true;
+}
 E57Reader::E57Reader()
 {
   mpImpl = new Impl(this);
@@ -95,8 +97,8 @@ bool E57Reader::Impl::GetSize(int& columns, int& rows)
 {
   int64_t  numGroups = 0, numGroupPts = 0, nCol, nRow;
   bool ok = mpReader->GetData3DSizes(mCurrentScan, nRow,
-                                     nCol, mPointCount,
-                                     numGroups, numGroupPts, mbColumnIndex);
+                                     nCol, mPointCount, numGroups,
+                                     numGroupPts, mbColumnIndex);
   columns = (int)nCol;
   rows = (int)nRow;
   if (mPointCount == 0)
@@ -109,10 +111,8 @@ bool E57Reader::Impl::GetSize(int& columns, int& rows)
       nRow = mPointCount;
     }
   }
-
-  return ok;
+  return true;
 }
-
 
 bool E57Reader::Impl::GetHeader(double scannerPos[12], double ucs[16])
 {
@@ -121,15 +121,12 @@ bool E57Reader::Impl::GetHeader(double scannerPos[12], double ucs[16])
   {
     return false;
   }
-  mHasIntensity = data3d.pointFields.intensityField;
-  mHasColor = data3d.pointFields.colorBlueField &&
-              data3d.pointFields.colorRedField &&
-              data3d.pointFields.colorGreenField;
   memcpy(scannerPos, &data3d.pose.translation.x, sizeof(double) * 3);
-  //Eigen::Vector3d trans = *(Eigen::Vector3d*)&data3d.pose.translation.x;
   Eigen::Quaterniond quaternion = Eigen::Quaterniond(
-                                    data3d.pose.rotation.w, data3d.pose.rotation.x,
-                                    data3d.pose.rotation.y, data3d.pose.rotation.z);
+                                    data3d.pose.rotation.w,
+                                    data3d.pose.rotation.x,
+                                    data3d.pose.rotation.y,
+                                    data3d.pose.rotation.z);
   const Eigen::Vector3d rotX = quaternion * Eigen::Vector3d::UnitX();
   const Eigen::Vector3d rotY = quaternion * Eigen::Vector3d::UnitY();
   const Eigen::Vector3d rotZ = quaternion * Eigen::Vector3d::UnitZ();
@@ -146,7 +143,7 @@ bool E57Reader::MoveNextScan()
   return mpImpl->MoveNextScan();
 }
 
-__int64 E57Reader::GetPointCount()
+size_t E57Reader::GetPointCount()
 {
   return mpImpl-> mPointCount;
 }
@@ -164,8 +161,22 @@ bool  E57Reader::Impl::MoveNextScan()
 {
   if (++mCurrentScan >= mNumScan)
   { return false; }
-  mFormat = -1;
+
+  if (mpReader->ReadData3D(mCurrentScan, mMetaData) == false)
+  {
+    return false;
+  }
+  AnalysisFormat();
   return true;
+}
+
+void E57Reader::Impl::AnalysisFormat()
+{
+  mHasIntensity = mMetaData.pointFields.intensityField;
+  mHasColor = mMetaData.pointFields.colorBlueField &&
+              mMetaData.pointFields.colorRedField &&
+              mMetaData.pointFields.colorGreenField;
+  mHasState = mMetaData.pointFields.cartesianInvalidStateField;
 }
 
 std::string E57Reader::GetScanName()
@@ -178,10 +189,12 @@ bool E57Reader::GetHeader(double scannerPos[12], double ucs[16])
   return mpImpl->GetHeader(scannerPos, ucs);
 }
 
-int E57Reader::ReadPoints(vector<float>& x, vector<float>& y, vector<float>& z,
-                          vector<float>& rIntensity, vector<int>& rColor)
+size_t E57Reader::ReadPoints(vector<float>& x, vector<float>& y,
+                             vector<float>& z,
+                             vector<float>& rIntensity,
+                             vector<int>& rColor, CB pFun)
 {
-  return mpImpl->ReadPoints(x, y, z, rIntensity, rColor);
+  return mpImpl->ReadPoints(x, y, z, rIntensity, rColor, pFun);
 }
 
 void E57Reader::Reset()
@@ -191,124 +204,57 @@ void E57Reader::Reset()
 
 std::string E57Reader::Impl::GetScanName()
 {
-  using namespace e57;
-  StructureNode scan(mpReader->GetRawData3D().get(mCurrentScan));
-  return scan.elementName();
+  return mMetaData.name;
 }
 
-CompressedVectorReader
-E57Reader::Impl::InitReader(int chunkSize)
+void
+E57Reader::Impl::InitDataBuffer(int chunkSize, vector<SourceDestBuffer>& sdb)
 {
   using namespace e57;
-  StructureNode scan(mpReader->GetRawData3D().get(mCurrentScan));
-
-  CompressedVectorNode     points(scan.get("points"));
-  StructureNode            prototype(points.prototype());
-  vector<SourceDestBuffer> sdb;
   const size_t buf_size = chunkSize;
-  //vector<std::variant<vector<double>, vector<int64_t>, vector<ustring> > > buf;
-  mX.reserve(buf_size);
-  mY.reserve(buf_size);
-  mZ.reserve(buf_size);
   mIntensity.reserve(buf_size);
-  mr.reserve(buf_size);
-  mg.reserve(buf_size);
-  mb.reserve(buf_size);
+  mPosition.reserve(buf_size * 3);
   rowIndex.reserve(buf_size);
   columnIndex.reserve(buf_size);
-  mState.resize(buf_size);
+  mState.reserve(buf_size);
+  mColors.reserve(buf_size);
   ImageFile imf = mpReader->GetRawData3D().destImageFile();
-
-  for (int i = 0; i < prototype.childCount(); ++i)
+  auto fields = mMetaData.pointFields;
+  if (fields.cartesianXField)
   {
-    Node n(prototype.get(i));
-    auto name = n.elementName();
-    switch (n.type())
+    sdb.push_back(SourceDestBuffer(imf, "cartesianX",
+                                   mPosition.data(), buf_size, true, true, 8));
+    sdb.push_back(SourceDestBuffer(imf, "cartesianY",
+                                   mPosition.data() + 1, buf_size, true, true, 8));
+    sdb.push_back(SourceDestBuffer(imf, "cartesianZ",
+                                   mPosition.data() + 2, buf_size, true, true, 8));
+    if (fields.cartesianInvalidStateField)
     {
-    case e57::E57_FLOAT:
-    case e57::E57_SCALED_INTEGER:
-    {
-      bool scaled = n.type() == e57::E57_SCALED_INTEGER;
-      double* pDbl = nullptr;
-      if (name == "cartesianX") { pDbl = mX.data(); }
-      else if (name == "cartesianY") { pDbl = mY.data(); }
-      else if (name == "cartesianZ") { pDbl = mZ.data(); }
-      else if (name == "intensity") { pDbl = mIntensity.data(); }
-      if (pDbl == nullptr)
-      {
-        break;
-      }
-
-      sdb.push_back(
-        SourceDestBuffer(
-          imf
-          , n.elementName()
-          , pDbl
-          , buf_size
-          , true
-          , true
-        )
-      );
-      break;
-    }
-    case e57::E57_INTEGER:
-    {
-      uint8_t* pBuffer = nullptr;
-      int* pInteger = nullptr;
-      if (name == "colorRed") { pBuffer = mr.data(); }
-      else if (name == "colorGreen") { pBuffer = mg.data(); }
-      else if (name == "colorBlue") { pBuffer = mb.data(); }
-      if (pBuffer == nullptr)
-      {
-        if (name == "rowIndex") { pInteger = rowIndex.data(); }
-        else if (name == "columnIndex") { pInteger = columnIndex.data(); }
-        //else if (name == "intensity") { pInteger = (int*)mIntensity.data(); }
-        else if (name == "cartesianInvalidState") { pInteger = mState.data(); }
-        if (pInteger != nullptr)
-        {
-          sdb.push_back(
-            SourceDestBuffer(
-              imf
-              , n.elementName()
-              , pInteger
-              , buf_size
-              , true
-              , true
-            )
-          );
-        }
-        break;
-      }
-
-      sdb.push_back(
-        SourceDestBuffer(
-          imf
-          , n.elementName()
-          , pBuffer
-          , buf_size
-          , true
-          , true
-        )
-      );
-      break;
-    }
-    case e57::E57_STRING:
-      break;
-    default:
-      throw (runtime_error(
-               "prototype contains illegal type")
-            );
+      sdb.push_back(SourceDestBuffer(imf, "cartesianInvalidState",
+                                     mState.data(), buf_size, true, true));
     }
   }
-
-  return points.reader(sdb);
+  if (fields.intensityField)
+  {
+    sdb.push_back(SourceDestBuffer(imf, "intensity",
+                                   mIntensity.data(), buf_size, true, true));
+  }
+  if (fields.colorBlueField && fields.colorGreenField && fields.colorRedField)
+  {
+    sdb.push_back(SourceDestBuffer(imf, "colorRed", (uint8_t*)mColors.data(),
+                                   buf_size, true, true));
+    sdb.push_back(SourceDestBuffer(imf, "colorGreen", ((uint8_t*)
+                                   mColors.data()) + 1, buf_size, true, true, 4));
+    sdb.push_back(SourceDestBuffer(imf, "colorBlue", ((uint8_t*)
+                                   mColors.data()) + 2, buf_size, true, true, 4));
+  }
 }
 
 //note does not handle large coordinate
-int E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
-                                vector<float>& z,
-                                vector<float>& rIntensity,
-                                vector<int>& rgbColor)
+size_t E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
+                                   vector<float>& z,
+                                   vector<float>& rIntensity,
+                                   vector<int>& rColor, CB pFun)
 {
   e57::Data3D data3d;
   if (mpReader->ReadData3D((int32_t)mCurrentScan, data3d) == false)
@@ -316,11 +262,12 @@ int E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
     return false;
   }
   const size_t chunkSize = 1024 * 1024;
-  CompressedVectorReader vectorReader = InitReader(chunkSize);
-  int total = 0;
-  strstream os;
-  vectorReader.dump(2, os);
-  string str = os.str();
+  vector<SourceDestBuffer> sdb;
+  InitDataBuffer(chunkSize, sdb);
+  StructureNode scan(mpReader->GetRawData3D().get(mCurrentScan));
+  CompressedVectorNode points(scan.get("points"));
+  CompressedVectorReader vectorReader = points.reader(sdb);
+  size_t total = 0;
   if (vectorReader.isOpen())
   {
     int np = 0;
@@ -331,24 +278,36 @@ int E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
       z.resize(np);
       rIntensity.resize(np);
       if (mHasColor)
-      { rgbColor.resize(np); }
+      { rColor.resize(np); }
       total += np;
+      if (mHasIntensity)
+      {
+        mIntensity.resize(np);
+        rIntensity.swap(mIntensity);
+      }
+      if (mHasColor)
+      {
+        mColors.resize(np);
+        rColor.swap(mColors);
+      }
       for (int i = 0; i < np; i++)
       {
-        x[i] = (float)mX[i];
-        y[i] = (float)mY[i];
-        z[i] = (float)mZ[i];
-        if (mHasIntensity)
-        { rIntensity[i] = (float)mIntensity[i]; }
-        else
+        auto ax = (float)mPosition[i * 3];
+        auto ay = (float)mPosition[i * 3 + 1];
+        auto az = (float)mPosition[i * 3 + 2];
+        bool hasdata = mHasState ? mState[i] : true;
+
+        x[i] = (float)mPosition[i * 3];
+        y[i] = (float)mPosition[i * 3 + 1];
+        z[i] = (float)mPosition[i * 3 + 2];
+        if (hasdata == false)
         {
-          rIntensity[i] = 0.5;
-        }
-        if (mHasColor)
-        {
-          rgbColor[i] = mr[i] + (mg[i] << 8) + (mb[i] << 16);
+          if (mHasIntensity)
+          { mIntensity[i] = 0; }
         }
       }
+      if (pFun)
+      { pFun(x, y, z, rIntensity, rColor); }
     }
     vectorReader.close();
   }
@@ -358,12 +317,4 @@ int E57Reader::Impl::ReadPoints(vector<float>& x, vector<float>& y,
 void E57Reader::Impl::Reset()
 {
   mCurrentScan = -1;
-}
-
-//to do test code
-bool E57Reader::TravelPoints(CB fun)
-{
-  int vv;
-  fun(&vv);
-  return 0;
 }

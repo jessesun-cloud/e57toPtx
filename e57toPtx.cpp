@@ -82,11 +82,17 @@ int ProcessConvert()
       ptxwriter.WriteHeader(scannerPos, ucs);
       vector<float>x, y, z, intensity;
       vector<int> color;
-      int np;
-      if ((np = reader.ReadPoints(x, y, z, intensity, color)) != 0)
+      auto ExportLambda = [&](vector<float>& x,
+                              vector<float>& y,
+                              vector<float>& z,
+                              vector<float>& rIntensity,
+                              vector<int>& rgbColor)->bool
       {
         ptxwriter.WritePoints(x, y, z, intensity, color);
-      }
+        return true;
+      };
+      size_t np = reader.ReadPoints(x, y, z, intensity,
+                                    color, ExportLambda);
       total += np;
     }
   printf("convert %lld points\r\n", total);
