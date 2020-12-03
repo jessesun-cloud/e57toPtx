@@ -5,6 +5,7 @@
 
 using namespace std;
 
+typedef bool CB(int*) ;
 class E57Reader
 {
 public:
@@ -12,13 +13,13 @@ public:
   ~E57Reader();
 
   bool Open(const char* pFilename);
-  bool GetSize(int& column, int& width);
-  void ReadHeader(vector<string>& rHeader);
+  bool GetSize(int& columns, int& rows);
   std::string GetScanName();
-  void GetHeader(double scannerPos[3], double rotation[9], double ucs[16]);
+  bool GetHeader(double scannerPos[12], double ucs[16]);
   bool MoveNextScan();
   int ReadPoints(vector<float>& x, vector<float>& y, vector<float>& z,
                  vector<float>& rIntensity, vector<int>& rgbColor);
+  bool TravelPoints(CB fun);
   int GetNumScan();
   void Reset();
   __int64 GetPointCount();

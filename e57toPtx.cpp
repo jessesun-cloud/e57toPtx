@@ -69,20 +69,22 @@ int ProcessConvert()
   if (reader.Open(input.c_str()))
     while (reader.MoveNextScan())
     {
-      int col, rows;
-      reader.GetSize(col, rows);
-      ptxwriter.WriteSize(col, rows);
-      double scannerPos[3];
-      double rotation[9];
+      ptxwriter.NextScan();
+      int cols, rows;
+      if (reader.GetSize(cols, rows) == false)
+      { break; }
+      ptxwriter.WriteSize(cols, rows);
+      double scannerPos[12];
       double ucs[16];
-      reader.GetHeader(scannerPos, rotation, ucs);
-      ptxwriter.WriteHeader(scannerPos, rotation, ucs);
+      reader.GetHeader(scannerPos, ucs);
+      std::string scanName = reader.GetScanName();
+      ptxwriter.WriteHeader(scannerPos, ucs);
       vector<float>x, y, z, intensity;
       vector<int> color;
       int np;
-      while (np = reader.ReadPoints(x, y, z, intensity, color) != 0)
+      if (np = reader.ReadPoints(x, y, z, intensity, color) != 0)
       {
-        //ptxwriter.WriteLine();
+        ptxwriter.WritePoints(x, y, z, intensity, color);
       }
     }
   return 0;
