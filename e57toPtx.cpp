@@ -99,9 +99,6 @@ int main(int argc, char** argv)
 {
   if (parseInput(argc, argv))
   {
-    input = "e:\\gdrive\\import\\e57\\target2x.e57";
-    output = "e:\\gdrive\\temp\\target2x.ptx";
-
     return ProcessConvert();
   }
   return -1;
