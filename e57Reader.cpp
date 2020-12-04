@@ -98,8 +98,6 @@ bool E57Reader::Impl::GetSize(int& columns, int& rows)
   bool ok = mpReader->GetData3DSizes(mCurrentScan, nRow,
                                      nCol, mPointCount, numGroups,
                                      numGroupPts, mbColumnIndex);
-  columns = (int)nCol;
-  rows = (int)nRow;
   if (mPointCount == 0)
   { mPointCount = nRow * nCol; }
   else
@@ -110,6 +108,8 @@ bool E57Reader::Impl::GetSize(int& columns, int& rows)
       nRow = mPointCount;
     }
   }
+  columns = (int)nCol;
+  rows = (int)nRow;
   return true;
 }
 
