@@ -5,10 +5,11 @@
 
 using namespace std;
 
-typedef std::function<bool(vector<float>& x, vector<float>& y,
-                           vector<float>& z,
-                           vector<float>& rIntensity,
-                           vector<int>& rgbColor)> CB;
+typedef std::function<bool(int numPoint,
+                           float* x, float* y,
+                           float* z,
+                           float* rIntensity,
+                           int* rgbColor)> PointsCB;
 class E57Reader
 {
 public:
@@ -20,11 +21,7 @@ public:
   std::string GetScanName();
   bool GetHeader(double scannerPos[12], double ucs[16]);
   bool MoveNextScan();
-  size_t ReadPoints(vector<float>& x, vector<float>& y,
-                    vector<float>& z,
-                    vector<float>& rIntensity,
-                    vector<int>& rgbColor,
-                    CB pFun);
+  size_t ReadPoints(PointsCB pFun);
   int GetNumScan();
   void Reset();
   size_t GetPointCount();

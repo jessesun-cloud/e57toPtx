@@ -12,6 +12,7 @@ namespace fs = std::experimental::filesystem;
 
 std::string input, output;
 int posPrecision = 3, intensityPrecision = 3, subsample = 1;
+bool bWriteMultiple = false;
 
 void printusage()
 {
@@ -43,27 +44,25 @@ bool parseInput(int argc, char** argv)
     { posPrecision = atoi(argv[++i]); }
     else if (key[1] == 'i')
     { intensityPrecision = atoi(argv[++i]); }
-    else if (key[1] == 's')
-    { subsample = atoi(argv[++i]); }
+    /*else if (key[1] == 's')
+    { subsample = atoi(argv[++i]); }*/
   }
   return true;
 }
 
-
 int ProcessConvert()
 {
   fs::path filename(input.c_str());
-  const bool isE57File = filename.extension() == ".e57";
-  if (isE57File == false)
+  const bool isE57 = filename.extension() == ".e57";
+  if (isE57 == false)
   { return -1; }
-
-  PtxWriter ptxwriter(output.c_str());
-  ptxwriter.Init(posPrecision, intensityPrecision, subsample);
-  if (ptxwriter.IsOpen() == false)
+  PtxWriter ptxwriter;
+  if (ptxwriter.Open(output.c_str()) == false)
   {
     printf("can not create file %s", output.c_str());
     return -3;
   }
+  ptxwriter.Init(posPrecision, intensityPrecision, subsample);
 
   E57Reader reader;
   __int64 total = 0;
@@ -80,19 +79,16 @@ int ProcessConvert()
       reader.GetHeader(scannerPos, ucs);
       std::string scanName = reader.GetScanName();
       ptxwriter.WriteHeader(scannerPos, ucs);
-      vector<float>x, y, z, intensity;
-      vector<int> color;
-      auto ExportLambda = [&](vector<float>& x,
-                              vector<float>& y,
-                              vector<float>& z,
-                              vector<float>& rIntensity,
-                              vector<int>& rgbColor)->bool
+
+      auto ExportLambda = [&](int np, float * x,
+                              float * y, float * z,
+                              float * pIntensity,
+                              int* rgbColor)->bool
       {
-        ptxwriter.WritePoints(x, y, z, intensity, color);
+        ptxwriter.WritePoints(np, x, y, z, pIntensity, rgbColor);
         return true;
       };
-      size_t np = reader.ReadPoints(x, y, z, intensity,
-                                    color, ExportLambda);
+      size_t np = reader.ReadPoints(ExportLambda);
       total += np;
     }
   printf("convert %lld points\r\n", total);
@@ -103,6 +99,9 @@ int main(int argc, char** argv)
 {
   if (parseInput(argc, argv))
   {
+    input = "e:\\gdrive\\import\\e57\\target2x.e57";
+    output = "e:\\gdrive\\temp\\target2x.ptx";
+
     return ProcessConvert();
   }
   return -1;
