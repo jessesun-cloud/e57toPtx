@@ -7,7 +7,7 @@ e57toPtx is an application to extract point cloud from e57 and write to ptx form
 
 
 usage:
-ptxzip inputfilename outputfilename -p PRECISION -s SAMPLERATE -i INTENSITY_PRECISION -m
+e57toptx inputfilename outputfilename -p PRECISION -s SAMPLERATE -i INTENSITY_PRECISION -m
 
 PRECISION, default be 3, is the precision we want to store position.
 
