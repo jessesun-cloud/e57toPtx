@@ -23,6 +23,7 @@ struct E57Reader::Impl
   string mFilename;
   int mSubsample;
   __int64 mPointCount;
+  int mColumns, mRows;
   int mNumScan;
   int mCurrentScan;
   bool mbColumnIndex;
@@ -94,13 +95,11 @@ bool E57Reader::GetSize(int& columns, int& rows)
 
 bool E57Reader::Impl::GetSize(int& columns, int& rows)
 {
-  int64_t  numGroups = 0, numGroupPts = 0, nCol, nRow;
+  int64_t  numGroups = 0, numGroupPts = 0, nCol, nRow, pointCount;
   bool ok = mpReader->GetData3DSizes(mCurrentScan, nRow,
-                                     nCol, mPointCount, numGroups,
+                                     nCol, pointCount, numGroups,
                                      numGroupPts, mbColumnIndex);
-  if (mPointCount == 0)
-  { mPointCount = nRow * nCol; }
-  else
+
   {
     if (nCol == 0 && nRow == 0)
     {
@@ -110,6 +109,8 @@ bool E57Reader::Impl::GetSize(int& columns, int& rows)
   }
   columns = (int)nCol;
   rows = (int)nRow;
+  mColumns = columns;
+  mRows = rows;
   return true;
 }
 
@@ -209,7 +210,11 @@ void E57Reader::Impl::AnalysisFormat()
     double s = mMetaData.intensityLimits.intensityMaximum -
                mMetaData.intensityLimits.intensityMinimum;
     if (s != 0)
-    { mIntensityScale = 1 / s; }
+    {
+      mIntensityScale = 1 / s;
+    }
+    else
+    { mIntensityScale = 1; }
   }
 
   mHasColor = mMetaData.pointFields.colorBlueField &&
@@ -269,19 +274,19 @@ CompressedVectorReader E57Reader::Impl::InitDataReader(int chunkSize)
 size_t
 E57Reader::Impl::ReadPoints(PointsCB pFun)
 {
-  const size_t chunkSize = 1024 * 1024;
-  vector<float> x, y, z, intensity;
+  const size_t chunkSize = mRows;
+  vector<float> pos, intensity;
   vector<int> color;
-  CompressedVectorReader vectorReader = InitDataReader(chunkSize);
+  CompressedVectorReader vectorReader = InitDataReader((int)chunkSize);
   size_t total = 0;
+  int col = 0;
   if (vectorReader.isOpen())
   {
     int np = 0;
     while ((np = vectorReader.read()) != 0)
     {
-      x.resize(np);
-      y.resize(np);
-      z.resize(np);
+      col++;
+      pos.resize(np * 3);
       if (mHasColor)
       { color.resize(np); }
       total += np;
@@ -297,9 +302,9 @@ E57Reader::Impl::ReadPoints(PointsCB pFun)
       for (int i = 0; i < np; i++)
       {
         bool hasdata = mHasState ? mState[i] == 0 : true;
-        x[i] = (float)mPosition[i];
-        y[i] = (float)mPosition[chunkSize + i];
-        z[i] = (float)mPosition[chunkSize * 2 + i];
+        pos[i * 3] = (float)mPosition[i];
+        pos[i * 3 + 1] = (float)mPosition[chunkSize + i];
+        pos[i * 3 + 2] = (float)mPosition[chunkSize * 2 + i];
         if (mHasIntensity)
         {
           intensity[i] = (float)ConvertIntensity(mIntensity[i]);
@@ -319,12 +324,12 @@ E57Reader::Impl::ReadPoints(PointsCB pFun)
       }
       if (pFun)
       {
-        pFun(np, x.data(), y.data(), z.data(),
-             intensity.data(),
+        pFun(np, pos.data(), intensity.data(),
              mHasColor ? color.data() : nullptr);
       }
     }
     vectorReader.close();
   }
+  mPointCount += total;
   return total;
 }

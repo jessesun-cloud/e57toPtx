@@ -11,7 +11,7 @@
 namespace fs = std::experimental::filesystem;
 
 std::string input, output;
-int posPrecision = 3, intensityPrecision = 3, subsample = 1;
+int posPrecision = 3, intensityPrecision = 2, subsample = 1;
 bool bWriteMultiple = false;
 
 void printusage()
@@ -62,7 +62,7 @@ int ProcessConvert()
     printf("can not create file %s", output.c_str());
     return -3;
   }
-  ptxwriter.Init(posPrecision, intensityPrecision, subsample);
+  ptxwriter.Init(posPrecision, intensityPrecision);
 
   E57Reader reader;
   __int64 total = 0;
@@ -81,11 +81,10 @@ int ProcessConvert()
       ptxwriter.WriteHeader(scannerPos, ucs);
 
       auto ExportLambda = [&](int np, float * x,
-                              float * y, float * z,
                               float * pIntensity,
                               int* rgbColor)->bool
       {
-        ptxwriter.WritePoints(np, x, y, z, pIntensity, rgbColor);
+        ptxwriter.WritePoints(np, x, pIntensity, rgbColor);
         return true;
       };
       size_t np = reader.ReadPoints(ExportLambda);
@@ -95,10 +94,12 @@ int ProcessConvert()
   return 0;
 }
 
+std::string FormatFloat(float x, const char* pFormat);
 int main(int argc, char** argv)
 {
   if (parseInput(argc, argv))
   {
+
     return ProcessConvert();
   }
   return -1;

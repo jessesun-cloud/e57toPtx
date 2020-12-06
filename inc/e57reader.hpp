@@ -5,9 +5,7 @@
 
 using namespace std;
 
-typedef std::function<bool(int numPoint,
-                           float* x, float* y,
-                           float* z,
+typedef std::function<bool(int numPoint, float* pos,
                            float* rIntensity,
                            int* rgbColor)> PointsCB;
 class E57Reader
