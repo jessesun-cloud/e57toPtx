@@ -104,7 +104,7 @@ bool E57Reader::Impl::GetSize(int& columns, int& rows)
     if (nCol == 0 && nRow == 0)
     {
       nCol = 1;
-      nRow = mPointCount;
+      nRow = pointCount;
     }
   }
   columns = (int)nCol;
@@ -274,7 +274,9 @@ CompressedVectorReader E57Reader::Impl::InitDataReader(int chunkSize)
 size_t
 E57Reader::Impl::ReadPoints(PointsCB pFun)
 {
-  const size_t chunkSize = mRows;
+  size_t chunkSize = mRows;
+  if (chunkSize == 0)
+  { chunkSize = 1000; }
   vector<float> pos, intensity;
   vector<int> color;
   CompressedVectorReader vectorReader = InitDataReader((int)chunkSize);
