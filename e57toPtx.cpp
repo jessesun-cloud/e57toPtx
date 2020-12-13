@@ -11,17 +11,17 @@
 namespace fs = std::experimental::filesystem;
 
 std::string input, output;
-int posPrecision = 3, intensityPrecision = 2, subsample = 1;
+int posPrecision = 4, intensityPrecision = 3, subsample = 1;
 bool bWriteMultiple = false;
 
 void printusage()
 {
-  printf("usage: ptxzip input output -p P -i I -s S"\
+  printf("usage: e57tozip input output -p P -i I"\
          "input -input filename"\
          "output -output filename"\
          "P -position precision, range 1-6"\
-         "I -intensity precision, range 1-6"\
-         "S -position precision, range 1-10"
+         "I -intensity precision, range 1-6"
+        
         );
 }
 
@@ -99,7 +99,6 @@ int main(int argc, char** argv)
 {
   if (parseInput(argc, argv))
   {
-
     return ProcessConvert();
   }
   return -1;
