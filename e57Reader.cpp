@@ -189,7 +189,7 @@ void E57Reader::Impl::InitFields(int chunkSize)
   }
 }
 
-bool  E57Reader::Impl::MoveNextScan()
+bool E57Reader::Impl::MoveNextScan()
 {
   if (++mCurrentScan >= mNumScan)
   { return false; }
@@ -296,26 +296,22 @@ E57Reader::Impl::ReadPoints(PointsCB pFun)
       {
         intensity.resize(np);
       }
-      else
-      {
-        intensity.clear();
-        intensity.resize(np, 0.5);
-      }
+      
       for (int i = 0; i < np; i++)
       {
         bool hasdata = mHasState ? mState[i] == 0 : true;
         pos[i * 3] = (float)mPosition[i];
         pos[i * 3 + 1] = (float)mPosition[chunkSize + i];
         pos[i * 3 + 2] = (float)mPosition[chunkSize * 2 + i];
+        if (hasdata == false)
+        {
+          pos[i * 3] = pos[i * 3 + 1] = pos[i * 3 + 2] = 0;
+        }
         if (mHasIntensity)
         {
           intensity[i] = (float)ConvertIntensity(mIntensity[i]);
         }
-        if (hasdata == false)
-        {
-          if (mHasIntensity)
-          { mIntensity[i] = 0; }
-        }
+        
         if (mHasColor)
         {
           uint8_t r = (uint8_t)mColors[i];
